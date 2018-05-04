@@ -1,4 +1,4 @@
-# [url-diversity](http://ws-dl.blogspot.com/2018/05/2018-05-01-an-exploration-of-url-diversity-measures.html)
+# [url-diversity](http://ws-dl.blogspot.com/2018/05/2018-05-04-exploration-of-url-diversity.html)
 Implementation of URL diversity measures:
 * WSDL diversity index, 
 * Simpson's diversity index, and 

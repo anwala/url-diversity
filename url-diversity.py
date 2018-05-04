@@ -4,7 +4,8 @@ from urllib.parse import urlparse
 from tldextract import extract
 
 '''
-	Implementation of URL diversity measures:
+	Implementation of URL diversity measures explained here:
+	http://ws-dl.blogspot.com/2018/05/2018-05-04-exploration-of-url-diversity.html
 		* WSDL diversity index, 
 		* Simpson's diversity index, and 
 		* Shannon's diversity index.
@@ -98,55 +99,70 @@ def getHostname(url, includeSubdomain=True):
 def shannonsEvennessIndex(uriLst):
 	
 	if( len(uriLst) == 0 ):
-		return 0
+		return {}
 
-	uriDiversity = {}
+	uriAndUnifiedDiversity = {'uri-diversity': {}, 'unified-diversity': {}}
 	for uri in uriLst:
 		#accumulate counts for uri specie
-		uriSpecie = getDedupKeyForURI(uri)
-		if( len(uriSpecie) == 0 ):
-			continue
-		uriDiversity.setdefault(uriSpecie, 0)
-		uriDiversity[uriSpecie] += 1
+		uriCanon = getDedupKeyForURI(uri)
+		if( len(uriCanon) != 0 ):
+			uriAndUnifiedDiversity['uri-diversity'].setdefault(uriCanon, 0)
+			uriAndUnifiedDiversity['uri-diversity'][uriCanon] += 1
 
-	N = len(uriLst)
-	R = len(uriDiversity)
-	summationOverPropSpecies = 0
-	for uri, n in uriDiversity.items():
-		summationOverPropSpecies += n/N * math.log(n/N)
-
-	maxEvenness = math.log(R)
-	if( maxEvenness == 0 ):
-		summationOverPropSpecies = 0
-	else:
-		summationOverPropSpecies = (summationOverPropSpecies * (-1))/ maxEvenness
+		hostname = getHostname(uri)
+		if( len(hostname) != 0 ):
+			uriAndUnifiedDiversity['unified-diversity'].setdefault(hostname, 0)
+			uriAndUnifiedDiversity['unified-diversity'][hostname] += 1
 	
-	return round(summationOverPropSpecies, 4)
+	N = len(uriLst)	
+	for policy in uriAndUnifiedDiversity:
+
+		R = len( uriAndUnifiedDiversity[policy] )
+		summationOverPropSpecies = 0
+		for uri, n in uriAndUnifiedDiversity[policy].items():
+			summationOverPropSpecies += n/N * math.log(n/N)
+
+		maxEvenness = math.log(R)
+		if( maxEvenness == 0 ):
+			uriAndUnifiedDiversity[policy] = 0
+		else:
+			uriAndUnifiedDiversity[policy] = (summationOverPropSpecies * (-1))/ maxEvenness
+	
+	return uriAndUnifiedDiversity
 
 def simpsonsDiversityIndex(uriLst):
 
 	if( len(uriLst) == 0 ):
-		return 0
+		return {}
 
-	uriDiversity = {}
+	uriAndUnifiedDiversity = {'uri-diversity': {}, 'unified-diversity': {}}
 	for uri in uriLst:
+		
 		#accumulate counts for uri specie
-		uriSpecie = getDedupKeyForURI(uri)
-		if( len(uriSpecie) == 0 ):
-			continue
-		uriDiversity.setdefault(uriSpecie, 0)
-		uriDiversity[uriSpecie] += 1
-	
-	N = len(uriLst)
-	summationOverSpecies = 0
-	for uri, n in uriDiversity.items():
-		summationOverSpecies += n * (n - 1)
+		uriCanon = getDedupKeyForURI(uri)
+		if( len(uriCanon) != 0 ):
+			uriAndUnifiedDiversity['uri-diversity'].setdefault(uriCanon, 0)
+			uriAndUnifiedDiversity['uri-diversity'][uriCanon] += 1
 
-	if( N == 1 ):
-		return 0
-	else:
-		D = summationOverSpecies / (N * (N - 1))
-		return 1 - D
+		hostname = getHostname(uri)
+		if( len(hostname) != 0 ):
+			uriAndUnifiedDiversity['unified-diversity'].setdefault(hostname, 0)
+			uriAndUnifiedDiversity['unified-diversity'][hostname] += 1
+
+	N = len(uriLst)
+	for policy in uriAndUnifiedDiversity:
+		
+		summationOverSpecies = 0
+		for uri, n in uriAndUnifiedDiversity[policy].items():
+			summationOverSpecies += n * (n - 1)
+
+		if( N == 1 ):
+			uriAndUnifiedDiversity[policy] = 0
+		else:
+			D = summationOverSpecies / (N * (N - 1))
+			uriAndUnifiedDiversity[policy] = 1 - D
+
+	return uriAndUnifiedDiversity
 
 def wsdlDiversityIndex(uriLst):
 	diversityPerPolicy = {'uri-diversity': set(), 'hostname-diversity': set(), 'domain-diversity': set()}
@@ -165,12 +181,16 @@ def wsdlDiversityIndex(uriLst):
 		if( len(uriCanon) != 0 ):
 			#get unique uris
 			diversityPerPolicy['uri-diversity'].add( uriCanon )						
-	
-		#get unique hostname	
-		diversityPerPolicy['hostname-diversity'].add( getHostname(uri) )					
+		
+		hostname = getHostname(uri)
+		if( len(hostname) != 0 ):
+			#get unique hostname
+			diversityPerPolicy['hostname-diversity'].add( hostname )					
 
-		#get unique domain	
-		diversityPerPolicy['domain-diversity'].add( getHostname(uri, includeSubdomain=False) )
+		domain = getHostname(uri, includeSubdomain=False)
+		if( len(domain) != 0 ):
+			#get unique domain	
+			diversityPerPolicy['domain-diversity'].add( domain )
 	
 	for policy in diversityPerPolicy:
 		U = len(diversityPerPolicy[policy])
@@ -182,17 +202,27 @@ def wsdlDiversityIndex(uriLst):
 def main():
 
 	uriLst = getCollection()
+	if( len(uriLst) == 0 ):
+		print('Error: Empty list')
+		return
+
 	print('\nURI diversity report for', len(uriLst), 'URIs:')
 
 	print('\nWSDL URI diversity:')
 	diversityPerPolicy = wsdlDiversityIndex(uriLst)
-
 	print( '  URI:', diversityPerPolicy['uri-diversity'] )
 	print( '  Hostname:', diversityPerPolicy['hostname-diversity'] )
 	print( '  Domain:', diversityPerPolicy['domain-diversity'] )
 
-	print( '\nSimpson\'s diversity index:', simpsonsDiversityIndex(uriLst) )
-	print( 'Shannon\'s evenness index:', shannonsEvennessIndex(uriLst), '\n' )
+	diversityPerPolicy = simpsonsDiversityIndex(uriLst)
+	print( '\nSimpson\'s diversity index:',  )
+	print( '  URI:', diversityPerPolicy['uri-diversity'] )
+	print( '  Unified (Species: URI, Individuals: Paths):', diversityPerPolicy['unified-diversity'] )
+
+	diversityPerPolicy = shannonsEvennessIndex(uriLst)
+	print( '\nShannon\'s evenness index:' )
+	print( '  URI:', diversityPerPolicy['uri-diversity'] )
+	print( '  Unified (Species: URI, Individuals: Paths):', diversityPerPolicy['unified-diversity'] )
 
 if __name__ == '__main__':
 	main()
